@@ -47,8 +47,10 @@ print(f"Loaded {len(all_traces)} lane traces from {len(traces_files)} files.")
 X, y = CreateModel.prepare_dataset(traces)
 
 # Split into 20:80 training/validation set
+training_size=0.7
+validation_size = 1 - training_size
 X_train, X_val, y_train, y_val, map_train, map_val = train_test_split(
-    X, y, file_trace_map, test_size=0.2, random_state=42
+    X, y, file_trace_map, test_size=training_size, random_state=42
 )
 
 print(f"Training set: {len(X_train)} lanes, Validation set: {len(X_val)} lanes")

@@ -113,3 +113,20 @@ def visualize_prediction(trace, pred):
 # ================================
 # End of CreateModel.py
 # ================================
+
+
+# Source - https://stackoverflow.com/a
+# Posted by Ulf Aslak, modified by community. See post 'Timeline' for change history
+# Retrieved 2025-12-02, License - CC BY-SA 4.0
+
+def class_feature_importance(X, Y, feature_importances):
+    N, M = X.shape
+    X = scale(X)
+
+    out = {}
+    for c in set(Y):
+        out[c] = dict(
+            zip(range(N), np.mean(X[Y==c, :], axis=0)*feature_importances)
+        )
+
+    return out
