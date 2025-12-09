@@ -4,6 +4,7 @@ import importlib
 import function_model as CreateModel
 from sklearn.model_selection import train_test_split
 from collections import defaultdict
+import matplotlib.pyplot as plt
 
 # Reload in case you edit the module
 importlib.reload(CreateModel)
@@ -29,6 +30,8 @@ os.makedirs(output_predictions, exist_ok=True)
 # --- load your traces from lane detection
 # ------------------------------------------
 traces_files = [f for f in os.listdir(output_traces) if f.lower().endswith('_traces_thresh.npy')]
+
+all_traces = [] 
 traces_thresh = []
 file_trace_map = []  # keep track of which trace came from which file
 
@@ -40,11 +43,24 @@ for f in traces_files:
 
 print(f"Loaded {len(all_traces)} lane traces from {len(traces_files)} files.")
 
+# Visualize a trace to ensure they are loaded correctly:# Pick a trace to visualize, e.g., the first one
+# trace = all_traces[0]
+
+# plt.figure(figsize=(8,4))
+# plt.plot(trace, color='blue')
+# plt.title("Lane Trace")
+# plt.xlabel("Position along lane")
+# plt.ylabel("Intensity / Density")
+# plt.grid(True)
+# plt.show()
+
+
 
 # -----------------------------
 # 1. Prepare dataset
 # -----------------------------
-X, y = CreateModel.prepare_dataset(traces)
+# X, y = CreateModel.prepare_dataset(traces)
+X, y = CreateModel.prepare_dataset(all_traces)
 
 # Split into 20:80 training/validation set
 training_size=0.7

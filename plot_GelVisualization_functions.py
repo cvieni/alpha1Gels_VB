@@ -94,7 +94,7 @@ def lane_overlay_side_by_side(gel_img, traces, lanes, lane_index, output_direct,
     # 1. Lane overlay on gel
     plt.subplot(1, 3, 1)
     plt.imshow(gel_img, cmap="gray", aspect="auto", alpha=alpha)
-    plt.gca().invert_yaxis()
+    # plt.gca().invert_yaxis()
     plt.plot(trace_scaled, range(len(lane_trace)), color=line_color, linewidth=2)
     plt.title(f"Lane {lane_index+1} Overlay")
     plt.axis("off")
@@ -110,19 +110,19 @@ def lane_overlay_side_by_side(gel_img, traces, lanes, lane_index, output_direct,
     lane_img = gel_img[:, x_start:x_end]
 
     plt.imshow(lane_img, cmap="gray", aspect="auto")
-    plt.gca().invert_yaxis()  # flip to match overlay
+    # plt.gca().invert_yaxis()  # flip to match overlay
     plt.axis("off")
     plt.title(f"Lane {lane_index+1} Only")
 
     # 3. Lane density plot
     plt.subplot(1, 3, 3)
     plt.plot(lane_trace)
-    plt.gca().invert_yaxis()
+    # plt.gca().invert_yaxis()
     plt.title(f"Lane {lane_index+1} Density")
 
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.show()
+    # plt.show()
     print("Saved:", save_path)
 
 
@@ -141,5 +141,5 @@ def visualize_lane_detection(gel_img, lanes, output_direct, prefix=""):
     plt.axis("off")
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.show()
+    # plt.show()
     print("Saved:", save_path)
