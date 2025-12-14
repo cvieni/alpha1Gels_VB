@@ -182,7 +182,11 @@ print(f"Loaded {len(all_traces)} traces with labels.")
 
 print("Extracting features...")
 
-X = np.array([modelfncs.extract_features(t) for t in all_traces])
+NumPeaksConsidered_K = 6
+min_peak_height=0.2 # after normalizing from 0-1
+min_peak_distance=10 # in pixels (of 600)
+
+X = np.array([modelfncs.extract_features(t, NumPeaksConsidered_K, min_peak_height, min_peak_distance) for t in all_traces])
 y = np.array(all_labels)
 
 print(f"Feature matrix shape: {X.shape}")
