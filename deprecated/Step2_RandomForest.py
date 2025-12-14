@@ -1,3 +1,5 @@
+%reset -sf
+
 import os
 import numpy as np
 import importlib
@@ -6,10 +8,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 import shap
 import matplotlib.pyplot as plt
-
 
 # Load your feature extraction functions
 import randomForest as modelfncs
@@ -53,6 +55,16 @@ if not required_cols.issubset(df_labels.columns):
 df_filtered = df_labels[list(required_cols)]
 # Rename column headers --------
 df_filtered = df_filtered.rename(columns={"result": "label"})
+df_filtered["image"] = df_filtered["image"].astype(int)
+df_filtered["lane"] = df_filtered["lane"].astype(int)
+# ensure order of dataframe
+df_filtered = df_filtered[["image", "lane", "label"]]
+
+df_M_unknown = df_filtered.copy()
+df_M_unknown["label"] = df_filtered["label"].where(df_filtered["label"] == "M", "Other")
+
+
+
 
 print(f"Loaded {len(df_labels)} label entries.")
 print(f"Saved a variable called df_filtered with only column titles:", required_cols)
@@ -83,26 +95,6 @@ trace_df["image"] = trace_df["image"].str.replace(".jpg","")
 trace_df["image"] = trace_df["image"].astype(int)  # convert to int
 trace_df["lane"] = trace_df["lane"] + 1
 
-
-# -------------------------
-# ---- Merge with labels on gel AND lane
-# -------------------------
-trace_df = trace_df.merge(df_filtered, on=["image", "lane"], how="left")
-
-if trace_df["label"].isnull().any():
-    raise ValueError("Some traces do not have matching labels in CSV!")
-
-# Extract lists
-all_traces = trace_df["trace"].tolist()
-all_labels = trace_df["label"].tolist()
-file_trace_map = trace_df["file"].tolist()
-
-print(f"Loaded {len(all_traces)} traces with labels.")
-
-# I noticed that some gels the calling is for 19 total lanes (in an 18 well gell) which are just cause of a bad crop
-# Wondering if these should be removed for training the model??? 
-# Maybe discuss with Dr. Vb, could also want "bad" lanes for comparison with the model
-
 # Count number of lanes per image/gel
 lane_counts = trace_df.groupby("image")["lane"].count()
 # Show images with exactly 19 lanes
@@ -110,10 +102,71 @@ images_19_lanes = lane_counts[lane_counts == 19]
 print("These images have an extra lane called due to cropping issue:")
 print(images_19_lanes)
 
+# -------------------------
+# Remove specific lanes or remove all lanes 1 and 19 from any lane that has > 18 lanes
+# -------------------------
+
+miscalled_lanes = [
+    (25337, 19),
+    (25340, 19),
+    (25341, 19),
+    (25343, 1),
+    (25346, 19),
+]
+
+# Keep track of which images had lanes removed
+images_to_renumber = set(img for img, lane in miscalled_lanes)
+
+trace_df = trace_df[
+    ~trace_df[["image", "lane"]].apply(tuple, axis=1).isin(miscalled_lanes)
+]
+
+# Only re-number lanes for affected images
+def renumber_lanes(group):
+    if group.name in images_to_renumber:
+        group["lane"] = range(1, len(group) + 1)
+    return group
+
+trace_df = trace_df.groupby("image", group_keys=False).apply(renumber_lanes)
+
+# trace_df = trace_df[~(
+#     (trace_df["image"].isin(images_19_lanes)) &
+#     (trace_df["lane"] == 19)
+# )]
+
+print(df_M_unknown.columns)
+
+
+# -------------------------
+# ---- Merge with labels on gel AND lane
+# -------------------------
+# Merge with M / All labels
+# trace_df = trace_df.merge(df_filtered, on=["image", "lane"], how="left")
+# Merge with M / Unknown
+trace_df = trace_df.merge(df_M_unknown, on=["image", "lane"], how="left")
+
+if trace_df["label"].isnull().any():
+    raise ValueError("Some traces do not have matching labels in CSV!")
+
+# I noticed that some gels the calling is for 19 total lanes (in an 18 well gell) which are just cause of a bad crop
+# Wondering if these should be removed for training the model??? 
+# Maybe discuss with Dr. Vb, could also want "bad" lanes for comparison with the model
+
+missing_labels = trace_df[trace_df["label"].isnull()]
+print("Traces without labels:")
+print(missing_labels[["image", "lane", "file"]])
+
 
 # -------------------------
 # ---- Feature extraction
 # -------------------------
+
+# Extract lists
+all_traces = trace_df["trace"].tolist()
+all_labels = trace_df["label"].tolist()
+file_trace_map = trace_df["file"].tolist()
+
+print(f"Loaded {len(all_traces)} traces with labels.")
 
 print("Extracting features...")
 
@@ -129,9 +182,9 @@ print(f"Number of labels: {len(y)}")
 
 training_set_size = 0.8 
 
-X_train, X_val, y_train, y_val, ftm_train, ftm_val = train_test_split(
-    X, y, file_trace_map, test_size=training_set_size, random_state=42, stratify=y
-)
+# X_train, X_val, y_train, y_val, ftm_train, ftm_val = train_test_split(
+#     X, y, file_trace_map, test_size=training_set_size, random_state=42, stratify=y
+# )
 
 # remove stratify=y so that the training data is split randomly ------
 # X_train, X_val, y_train, y_val, ftm_train, ftm_val = train_test_split(
@@ -153,8 +206,21 @@ X = X[mask]
 y = y[mask]
 file_trace_map = [f for i, f in enumerate(file_trace_map) if mask[i]]
 
+
+# X_train, X_val, y_train, y_val, ftm_train, ftm_val = train_test_split(
+#     X, y, file_trace_map, test_size=training_set_size, random_state=42, stratify=y
+# )
+
+
+# Encode labels as integers (M=1, Other=0) -----> this will allow for ROC and other stats for the model
+le = LabelEncoder()
+y_encoded = le.fit_transform(y)
+
 X_train, X_val, y_train, y_val, ftm_train, ftm_val = train_test_split(
-    X, y, file_trace_map, test_size=training_set_size, random_state=42, stratify=y
+    X, y_encoded, file_trace_map,
+    test_size=training_set_size,
+    random_state=42,
+    stratify=y_encoded
 )
 
 # -------------------------
@@ -177,6 +243,38 @@ print("Training complete.")
 print(f"Training accuracy: {clf.score(X_train, y_train):.3f}")
 
 print(f"Validation accuracy: {clf.score(X_val, y_val):.3f}")
+
+
+train_sizes, train_scores, val_scores = learning_curve(
+    clf, X, y_encoded, cv=5, train_sizes=np.linspace(0.1, 1.0, 10),
+    scoring='accuracy', n_jobs=-1
+)
+
+train_scores_mean = train_scores.mean(axis=1)
+val_scores_mean = val_scores.mean(axis=1)
+
+plt.figure(figsize=(8,6))
+plt.plot(train_sizes, train_scores_mean, 'o-', label='Training score')
+plt.plot(train_sizes, val_scores_mean, 'o-', label='Validation score')
+plt.xlabel('Training set size')
+plt.ylabel('Accuracy')
+plt.title('Learning Curves')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # cross-validation to better estimate generalization
@@ -214,76 +312,76 @@ best_clf = RandomForestClassifier(
 
 best_clf.fit(X, y)
 
-# -------------------------
-# ---- Unknown Detection Threshold
-# -------------------------
-# We use maximum class probability as uncertainty measure
+# # -------------------------
+# # ---- Unknown Detection Threshold
+# # -------------------------
+# # We use maximum class probability as uncertainty measure
 
-print(f"Estimating optimal Unknown detection threshold...")
+# print(f"Estimating optimal Unknown detection threshold...")
 
-# returns the probability for each class for every sample in X_val (i.e. if trace is predicited as 0.1-cls1, 0.1-cls2, 0.8-cls3-> model is 80% confident its class 3)
-val_probs = best_clf.predict_proba(X_val)
-# now just save max probability class for each sample
-val_maxp = val_probs.max(axis=1)
+# # returns the probability for each class for every sample in X_val (i.e. if trace is predicited as 0.1-cls1, 0.1-cls2, 0.8-cls3-> model is 80% confident its class 3)
+# val_probs = best_clf.predict_proba(X_val)
+# # now just save max probability class for each sample
+# val_maxp = val_probs.max(axis=1)
 
-# Since we don't have true "unknowns", we approximate:
-# threshold = 5th percentile of known validation confidence
-UNKNOWN_THRESHOLD = np.percentile(val_maxp, 5)
-# ^^^^ Unknown above means an "unknown class". I.e. a band pattern that is not represented in our training data (ex. if class A,B,C,D in training, this would be class E)
+# # Since we don't have true "unknowns", we approximate:
+# # threshold = 5th percentile of known validation confidence
+# UNKNOWN_THRESHOLD = np.percentile(val_maxp, 5)
+# # ^^^^ Unknown above means an "unknown class". I.e. a band pattern that is not represented in our training data (ex. if class A,B,C,D in training, this would be class E)
 
-print(f"Auto-selected UNKNOWN_THRESHOLD = {UNKNOWN_THRESHOLD:.3f}")
+# print(f"Auto-selected UNKNOWN_THRESHOLD = {UNKNOWN_THRESHOLD:.3f}")
+
+# # # -------------------------
+# # # Predict all
+# # # -------------------------
+
+# # print("\nRunning predictions on all traces...")
+
+# # all_probs = best_clf.predict_proba(X)
+# # all_maxp = all_probs.max(axis=1)
+# # all_preds_raw = best_clf.predict(X)
+
+# # # apply unknown threshold
+# # final_preds = []
+
+# # for raw_label, maxp in zip(all_preds_raw, all_maxp):
+# #     if maxp < UNKNOWN_THRESHOLD:
+# #         final_preds.append("Unknown")
+# #     else:
+# #         final_preds.append(raw_label)
 
 # # -------------------------
-# # Predict all
+# # Predict Validation data set
 # # -------------------------
+# # Predict class probabilities on validation set
+# val_probs = best_clf.predict_proba(X_val)  # shape: [num_val_samples, num_classes]
 
-# print("\nRunning predictions on all traces...")
+# # Get maximum probability per trace (model confidence)
+# val_maxp = val_probs.max(axis=1)
 
-# all_probs = best_clf.predict_proba(X)
-# all_maxp = all_probs.max(axis=1)
-# all_preds_raw = best_clf.predict(X)
+# # Get predicted classes for each validation trace
+# val_preds_raw = best_clf.predict(X_val)
 
-# # apply unknown threshold
-# final_preds = []
-
-# for raw_label, maxp in zip(all_preds_raw, all_maxp):
+# # Apply unknown threshold if you want to flag low-confidence predictions
+# final_val_preds = []
+# for raw_label, maxp in zip(val_preds_raw, val_maxp):
 #     if maxp < UNKNOWN_THRESHOLD:
-#         final_preds.append("Unknown")
+#         final_val_preds.append("Unknown")
 #     else:
-#         final_preds.append(raw_label)
+#         final_val_preds.append(raw_label)
 
-# -------------------------
-# Predict Validation data set
-# -------------------------
-# Predict class probabilities on validation set
-val_probs = best_clf.predict_proba(X_val)  # shape: [num_val_samples, num_classes]
+# # Optionally, check validation accuracy (ignoring Unknowns)
+# mask_known = [pred != "Unknown" for pred in final_val_preds]
+# val_accuracy = np.mean(np.array(val_preds_raw)[mask_known] == np.array(y_val)[mask_known])
+# print(f"Validation accuracy (excluding Unknowns): {val_accuracy:.3f}")
 
-# Get maximum probability per trace (model confidence)
-val_maxp = val_probs.max(axis=1)
-
-# Get predicted classes for each validation trace
-val_preds_raw = best_clf.predict(X_val)
-
-# Apply unknown threshold if you want to flag low-confidence predictions
-final_val_preds = []
-for raw_label, maxp in zip(val_preds_raw, val_maxp):
-    if maxp < UNKNOWN_THRESHOLD:
-        final_val_preds.append("Unknown")
-    else:
-        final_val_preds.append(raw_label)
-
-# Optionally, check validation accuracy (ignoring Unknowns)
-mask_known = [pred != "Unknown" for pred in final_val_preds]
-val_accuracy = np.mean(np.array(val_preds_raw)[mask_known] == np.array(y_val)[mask_known])
-print(f"Validation accuracy (excluding Unknowns): {val_accuracy:.3f}")
-
-val_raw_accuracy = np.mean(val_preds_raw == y_val)
-print(f"Raw validation accuracy (no masking): {val_raw_accuracy:.3f}")
+# val_raw_accuracy = np.mean(val_preds_raw == y_val)
+# print(f"Raw validation accuracy (no masking): {val_raw_accuracy:.3f}")
 
 
-# ---------------------------------------------
-# 1. Feature Importance Plot for all features
-# ---------------------------------------------
+# # ---------------------------------------------
+# # 1. Feature Importance Plot for all features
+# # ---------------------------------------------
 
 print("\nPlotting feature importance...")
 
