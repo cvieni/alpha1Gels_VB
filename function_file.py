@@ -171,3 +171,5 @@ def extract_lane_traces(proc_img, lanes):
         trace = lane_strip.mean(axis=1)
         traces.append(trace)
     return traces
+
+
