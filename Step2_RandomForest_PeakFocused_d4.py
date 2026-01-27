@@ -25,10 +25,13 @@ importlib.reload(modelfncs)
 # ---- Define Directories
 # -------------------------
 
-projectdirect = "C:/Users/M297055/OneDrive - Mayo Clinic/Documents/Research/"
-# projectdirect = "/Users/cvieni/Documents/Pathology/alpha1Gels_VB"
-# working_direct = projectdirect
-working_direct = os.path.join(projectdirect, "Wilrich_alpha1_Isofocus_machinelearning/")
+# Home Computer ---------
+projectdirect = "/Users/cvieni/Documents/Pathology/alpha1Gels_VB"
+working_direct = projectdirect
+
+# Work Laptop ---------
+# projectdirect = "C:/Users/M297055/OneDrive - Mayo Clinic/Documents/Research/"
+# working_direct = os.path.join(projectdirect, "Wilrich_alpha1_Isofocus_machinelearning/")
 # C:/Users/M297055/OneDrive - Mayo Clinic/Documents/Research/Wilrich_alpha1_Isofocus_machinelearning/gel_scans
 
 
@@ -242,15 +245,18 @@ print("Extracting features...")
 # Train / validation split
 # -------------------------
 
-training_set_size = 0.8 
+training_set_size = 0.7 
 
 # Split lane IDs into train / validation
 train_lanes, val_lanes = train_test_split(
     unique_lanes,
-    test_size=training_set_size,
+    train_size=training_set_size,
     random_state=42,
     shuffle=True
 )
+
+print("Training set length:", len(train_lanes))
+print("Validation set length:", len(val_lanes))
 
 # Filter traces according to lane split
 train_df = all_traces_df[all_traces_df["lane_id"].isin(train_lanes)].copy()

@@ -1,0 +1,17 @@
+Model,Class,precision,recall,f1-score,support
+Random Forest,M,0.65,0.88,0.75,104.0
+Random Forest,MM1,0.75,0.32,0.44,38.0
+Random Forest,MS,0.6,0.41,0.49,22.0
+Random Forest,MZ,0.85,0.85,0.85,26.0
+Random Forest,Other,0.55,0.43,0.48,28.0
+Random Forest,accuracy,0.67,0.67,0.67,0.67
+Random Forest,macro avg,0.68,0.57,0.6,218.0
+Random Forest,weighted avg,0.67,0.67,0.65,218.0
+1D CNN,M,0.72,0.92,0.81,104.0
+1D CNN,MM1,0.53,0.45,0.49,38.0
+1D CNN,MS,0.83,0.86,0.84,22.0
+1D CNN,MZ,1.0,0.65,0.79,26.0
+1D CNN,Other,0.62,0.29,0.39,28.0
+1D CNN,accuracy,0.72,0.72,0.72,0.72
+1D CNN,macro avg,0.74,0.63,0.66,218.0
+1D CNN,weighted avg,0.72,0.72,0.7,218.0
