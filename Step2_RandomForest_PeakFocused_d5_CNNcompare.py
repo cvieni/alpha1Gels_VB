@@ -49,7 +49,8 @@ output_direct = os.path.join(working_direct, "output_pngs/")
 output_traces = os.path.join(working_direct, "output_traces/")
 output_predictions = os.path.join(projectdirect, "output_predictions/")
 os.makedirs(output_predictions, exist_ok=True)
-label_csv_path = os.path.join(img_direct, "Results_gels_25331_25350.csv") 
+# label_csv_path = os.path.join(img_direct, "Results_gels_25331_25350.csv") 
+label_csv_path = os.path.join(img_direct, "Results_gels_25331_25350_fixRepeat.csv") 
 
 tmp_image_direct= os.path.join(working_direct, "tmp_output_pngs/")
 
@@ -79,14 +80,26 @@ df_filtered["lane"] = df_filtered["lane"].astype(int)
 df_filtered = df_filtered[["image", "lane", "label"]]
 
 df_filtered["label"].unique()
+print("Print label counts before dropping repeat")
 print(df_filtered['label'].value_counts())
+print("")
+
+# Drop "repeat" labels BEFORE classification
+df_filtered = df_filtered[df_filtered["label"].str.lower() != "repeat"]
+# print("filtered", df_filtered.head())
+
+
+
 
 classes_vect = ["M","MM1", "MZ","MS"]
 df_M_unknown = df_filtered.copy()
 df_M_unknown["label"] = df_filtered["label"].where(df_filtered["label"].isin(classes_vect), "Other")
 
-# Optional: check counts
-print(df_M_unknown['label'].value_counts())
+print("")
+print("Print label counts after dropping repeat")
+print("\nClass distribution:")
+for label, count in df_filtered["label"].value_counts().items():
+    print(f"{label}: {count}")
 
 
 
@@ -206,13 +219,23 @@ print(df_M_unknown.columns)
 
 # ---- unaligned traces ------
 trace_df = trace_df.merge(df_M_unknown, on=["image", "lane"], how="left")
-if trace_df["label"].isnull().any():
-    raise ValueError("Some traces do not have matching labels in CSV!")
+# --> too strict led to crashing ----
+# if trace_df["label"].isnull().any():
+#     raise ValueError("Some traces do not have matching labels in CSV!")
+n_missing = trace_df["label"].isnull().sum()
+if n_missing > 0:
+    print(f"Unaligned: Dropping {n_missing} traces with no label (e.g., repeats)")
+trace_df = trace_df.dropna(subset=["label"]).reset_index(drop=True)
+
 
 # ---- aligned traces ------
 trace_df_aligned = trace_df_aligned.merge(df_M_unknown, on=["image", "lane"], how="left")
-if trace_df_aligned["label"].isnull().any():
-    raise ValueError("Some traces do not have matching labels in CSV!")
+# if trace_df_aligned["label"].isnull().any():
+#     raise ValueError("Some traces do not have matching labels in CSV!")
+n_missing_align = trace_df_aligned["label"].isnull().sum()
+if n_missing_align > 0:
+    print(f"Aligned: Dropping {n_missing_align} traces with no label (e.g., repeats)")
+trace_df_aligned = trace_df_aligned.dropna(subset=["label"]).reset_index(drop=True)
 
 
 # I noticed that some gels the calling is for 19 total lanes (in an 18 well gell) which are just cause of a bad crop
@@ -227,9 +250,16 @@ print(missing_labels[["image", "lane", "file"]])
 # -------------------------
 # ---- Add a marker so we can distinguish aligned vs unaligned
 # -------------------------
+
 trace_df["type"] = "unaligned"
 trace_df_aligned["type"] = "aligned"
 all_traces_df = pd.concat([trace_df, trace_df_aligned], ignore_index=True)
+
+
+all_traces_df = trace_df_aligned.copy()
+all_traces_df["type"] = "aligned"
+
+
 
 
 # -------------------------
@@ -629,6 +659,8 @@ print(f"Feature importance plot saved to: {feature_imp_file}")
 # ---------------------------------------------------------------------------------
 
 y_val_pred = clf.predict(X_val)
+print("")
+print("Table of Random Forest Model Stats")
 print(classification_report(y_val, y_val_pred, target_names=le.classes_))
 
 # Confusion Matrix --------
@@ -839,3 +871,87 @@ print(df_compare)
 compare_file = os.path.join(tmp_image_direct, "Model_Comparison_RF_CNN.csv")
 df_compare.to_csv(compare_file, index=False)
 print(f"Model comparison table saved to: {compare_file}")
+
+
+
+
+print("Rows in val_df:", len(val_df))
+print("Unique lanes in val_df:", val_df["lane_id"].nunique())
+print(val_df["type"].value_counts())
+
+
+# True labels
+y_val_true = y_val
+
+# RF predictions
+y_val_pred_rf = clf.predict(X_val)
+
+# CNN predictions
+y_val_pred_cnn_idx = np.argmax(cnn.predict(X_val_cnn), axis=1)
+y_val_pred_cnn = le.inverse_transform(y_val_pred_cnn_idx)
+
+
+
+y_val_pred_cnn_probs = cnn.predict(X_val_cnn)
+y_val_pred_cnn_conf = np.max(y_val_pred_cnn_probs, axis=1)
+
+
+df_predictions = pd.DataFrame({
+    "True_Label": y_val_true,
+    "RF_Prediction": y_val_pred_rf,
+    "CNN_Prediction": y_val_pred_cnn,
+    "CNN_Confidence": y_val_pred_cnn_conf
+})
+
+
+# -----------------------------
+# Build prediction dataframe (aligned with val_df)
+# -----------------------------
+
+# True labels
+y_val_true = val_df["label"].values
+
+# RF predictions
+y_val_pred_rf = clf.predict(X_val)
+
+# CNN predictions
+y_val_pred_cnn_probs = cnn.predict(X_val_cnn)
+y_val_pred_cnn_idx   = np.argmax(y_val_pred_cnn_probs, axis=1)
+y_val_pred_cnn       = le.inverse_transform(y_val_pred_cnn_idx)
+y_val_pred_cnn_conf  = np.max(y_val_pred_cnn_probs, axis=1)
+
+# Metadata (already aligned!)
+df_predictions = pd.DataFrame({
+    "image": val_df["image"].values,
+    "lane": val_df["lane"].values,
+    "True_Label": y_val_true,
+    "RF_Prediction": y_val_pred_rf,
+    "CNN_Prediction": y_val_pred_cnn,
+    "CNN_Confidence": y_val_pred_cnn_conf
+})
+
+# Add disagreement flag
+df_predictions["Disagree"] = (
+    df_predictions["RF_Prediction"] != df_predictions["CNN_Prediction"]
+)
+
+# Save
+pred_file = os.path.join(output_predictions, "RF_CNN_Predictions.csv")
+df_predictions.to_csv(pred_file, index=False)
+
+print(f"Saved predictions to: {pred_file}")
+print("\nDisagreements:")
+print(df_predictions[df_predictions["Disagree"]].head())
+
+
+
+print("\n=== Validation Set Class Distribution ===")
+val_dist = pd.Series(y_val_true).value_counts().sort_index()
+print(val_dist)
+
+print("\nPercentages:")
+print((val_dist / val_dist.sum() * 100).round(1))
+
+
+print("")
+print("Save df of results")

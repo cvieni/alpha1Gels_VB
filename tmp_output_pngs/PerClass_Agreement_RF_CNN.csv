@@ -1,0 +1,11 @@
+Model,True_Label,Agree_Count,Disagree_Count,Total,Accuracy
+Random Forest,M,55,2,57,0.96
+Random Forest,MM1,1,17,18,0.06
+Random Forest,MS,4,6,10,0.4
+Random Forest,MZ,8,5,13,0.62
+Random Forest,Other,1,7,8,0.12
+1D CNN,M,55,2,57,0.96
+1D CNN,MM1,6,12,18,0.33
+1D CNN,MS,8,2,10,0.8
+1D CNN,MZ,11,2,13,0.85
+1D CNN,Other,4,4,8,0.5
